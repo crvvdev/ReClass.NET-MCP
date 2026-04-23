@@ -1,21 +1,24 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Forms;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using ReClassNET.Memory;
 using ReClassNET.Nodes;
-using ReClassNET.Plugins;
+using ReClassNET.Plugins.V2;
+using ReClassNET.Plugins.V2.Services;
 
 namespace ReClassMCP
 {
     public class CommandHandler
     {
-        private readonly IPluginHost host;
+        private readonly IPluginContext _context;
+        private readonly SynchronizationContext _uiThread;
 
-        public CommandHandler(IPluginHost host)
+        public CommandHandler(IPluginContext context, SynchronizationContext uiThread)
         {
-            this.host = host;
+            _context = context;
+            _uiThread = uiThread;
         }
 
         public JObject Execute(string command, JObject args)
@@ -106,9 +109,9 @@ namespace ReClassMCP
 
         private JObject GetStatus()
         {
-            var isAttached = host.Process?.IsValid ?? false;
-            var processName = host.Process?.UnderlayingProcess?.Name ?? "";
-            var processId = host.Process?.UnderlayingProcess?.Id.ToInt64() ?? 0;
+            var isAttached = _context.Process.IsAttached;
+            var processName = _context.Process.Current?.UnderlayingProcess?.Name ?? "";
+            var processId = _context.Process.Current?.UnderlayingProcess?.Id.ToInt64() ?? 0;
 
             return Success(new JObject
             {
@@ -120,7 +123,7 @@ namespace ReClassMCP
 
         private JObject ReadMemory(JObject args)
         {
-            if (!host.Process.IsValid)
+            if (!_context.Process.IsAttached)
                 return Error("No process attached");
 
             var addressStr = args["address"]?.ToString();
@@ -150,7 +153,7 @@ namespace ReClassMCP
                 address = ParseAddressFormula(addressStr);
             }
 
-            var buffer = host.Process.ReadRemoteMemory(address, size);
+            var buffer = _context.Process.Current.ReadRemoteMemory(address, size);
             if (buffer == null)
                 return Error("Failed to read memory");
 
@@ -164,7 +167,7 @@ namespace ReClassMCP
 
         private JObject WriteMemory(JObject args)
         {
-            if (!host.Process.IsValid)
+            if (!_context.Process.IsAttached)
                 return Error("No process attached");
 
             var addressStr = args["address"]?.ToString();
@@ -193,7 +196,7 @@ namespace ReClassMCP
                 data[i] = Convert.ToByte(dataStr.Substring(i * 2, 2), 16);
             }
 
-            var success = host.Process.WriteRemoteMemory(address, data);
+            var success = _context.Process.Current.WriteRemoteMemory(address, data);
             return success ? Success() : Error("Failed to write memory");
         }
 
@@ -319,11 +322,11 @@ namespace ReClassMCP
 
         private JObject GetModules()
         {
-            if (!host.Process.IsValid)
+            if (!_context.Process.IsAttached)
                 return Error("No process attached");
 
             var modules = new JArray();
-            foreach (var module in host.Process.Modules)
+            foreach (var module in _context.Process.Current.Modules)
             {
                 modules.Add(new JObject
                 {
@@ -340,11 +343,11 @@ namespace ReClassMCP
 
         private JObject GetSections()
         {
-            if (!host.Process.IsValid)
+            if (!_context.Process.IsAttached)
                 return Error("No process attached");
 
             var sections = new JArray();
-            foreach (var section in host.Process.Sections)
+            foreach (var section in _context.Process.Current.Sections)
             {
                 sections.Add(new JObject
                 {
@@ -398,7 +401,7 @@ namespace ReClassMCP
                 var moduleName = parts[0].Trim();
                 var offsetStr = parts[1].Trim();
 
-                var module = host.Process.Modules.FirstOrDefault(m =>
+                var module = _context.Process.Current.Modules.FirstOrDefault(m =>
                     m.Name.Equals(moduleName, StringComparison.OrdinalIgnoreCase));
 
                 if (module != null)
@@ -682,16 +685,16 @@ namespace ReClassMCP
 
         private JObject GetProcessInfo()
         {
-            if (!host.Process.IsValid)
+            if (!_context.Process.IsAttached)
                 return Error("No process attached");
 
-            var proc = host.Process.UnderlayingProcess;
+            var proc = _context.Process.Current.UnderlayingProcess;
             return Success(new JObject
             {
                 ["id"] = proc.Id.ToInt64(),
                 ["name"] = proc.Name,
                 ["path"] = proc.Path,
-                ["is_valid"] = host.Process.IsValid
+                ["is_valid"] = _context.Process.IsAttached
             });
         }
 
@@ -758,33 +761,12 @@ namespace ReClassMCP
 
         private ReClassNET.Project.ReClassNetProject GetCurrentProject()
         {
-            ReClassNET.Project.ReClassNetProject project = null;
-
-            if (host.MainWindow.InvokeRequired)
-            {
-                host.MainWindow.Invoke(new Action(() =>
-                {
-                    project = host.MainWindow.CurrentProject;
-                }));
-            }
-            else
-            {
-                project = host.MainWindow.CurrentProject;
-            }
-
-            return project;
+            return _context.Project.Current;
         }
 
         private void InvokeOnMainThread(Action action)
         {
-            if (host.MainWindow.InvokeRequired)
-            {
-                host.MainWindow.Invoke(action);
-            }
-            else
-            {
-                action();
-            }
+            _uiThread.Send(_ => action(), null);
         }
     }
 }

@@ -56,6 +56,12 @@
     <PlatformTarget>x86</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
+  <PropertyGroup>
+    <PostBuildEvent>
+      xcopy /Y /I "$(TargetDir)$(TargetFileName)" "$(SolutionDir)..\ReClass.NET\bin\$(Configuration)\x64\Plugins\"
+      xcopy /Y /I "$(TargetDir)Newtonsoft.Json.dll" "$(SolutionDir)..\ReClass.NET\bin\$(Configuration)\x64\Plugins\"
+    </PostBuildEvent>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -66,17 +72,17 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>$(SolutionDir)packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="McpServer.cs" />
-    <Compile Include="ReClassMCPExt.cs" />
+    <Compile Include="ReClassMcpPlugin.cs" />
     <Compile Include="CommandHandler.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ReClass.NET\ReClass.NET\ReClass.NET.csproj">
+    <ProjectReference Include="..\..\ReClass.NET\ReClass.NET\ReClass.NET.csproj">
       <Project>{BFB8917D-E9B4-463F-A6E8-612C35728C78}</Project>
       <Name>ReClass.NET</Name>
       <Private>False</Private>
